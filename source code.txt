@@ -1,0 +1,134 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from sklearn.metrics import classification_report, confusion_matrix
+
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+plt.figure(figsize=(10, 5))
+for i in range(12):
+    plt.subplot(3, 4, i + 1)
+    plt.imshow(x_train[i], cmap='gray')
+    plt.title(f"Label: {y_train[i]}")
+    plt.axis('off')
+plt.tight_layout()
+plt.show()
+
+x_train = x_train / 255.0
+x_test = x_test / 255.0
+
+x_train = x_train.reshape(-1, 28, 28, 1)
+x_test = x_test.reshape(-1, 28, 28, 1)
+
+y_train_cat = to_categorical(y_train)
+y_test_cat = to_categorical(y_test)
+
+model = Sequential([
+    Conv2D(32, (3,3), activation='relu', input_shape=(28,28,1)),
+    MaxPooling2D(2,2),
+
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D(2,2),
+
+    Flatten(),
+    Dense(128, activation='relu'),
+    Dense(10, activation='softmax')
+])
+
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+model.summary()
+
+history = model.fit(x_train, y_train_cat, epochs=5, validation_data=(x_test, y_test_cat))
+
+plt.plot(history.history['accuracy'], label='train acc')
+plt.plot(history.history['val_accuracy'], label='val acc')
+plt.title('Accuracy over epochs')
+plt.legend()
+plt.show()
+
+y_pred = model.predict(x_test)
+y_pred_classes = np.argmax(y_pred, axis=1)
+
+conf_matrix = confusion_matrix(y_test, y_pred_classes)
+plt.figure(figsize=(10,8))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues')
+plt.xlabel("Predicted")
+plt.ylabel("True")
+plt.title("Confusion Matrix")
+plt.show()
+
+print(classification_report(y_test, y_pred_classes))
+
+pip install streamlit
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from tensorflow.keras.datasets import mnist
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.utils import to_categorical
+import streamlit as st
+from PIL import Image, ImageOps
+import os
+
+@st.cache_resource
+def train_and_save_model():
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+    x_train = x_train / 255.0
+    x_test = x_test / 255.0
+    x_train = x_train.reshape(-1, 28, 28, 1)
+    x_test = x_test.reshape(-1, 28, 28, 1)
+
+    y_train_cat = to_categorical(y_train)
+    y_test_cat = to_categorical(y_test)
+
+    model = Sequential([
+        Conv2D(32, (3,3), activation='relu', input_shape=(28,28,1)),
+        MaxPooling2D(2,2),
+        Conv2D(64, (3,3), activation='relu'),
+        MaxPooling2D(2,2),
+        Flatten(),
+        Dense(128, activation='relu'),
+        Dense(10, activation='softmax')
+    ])
+
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.fit(x_train, y_train_cat, epochs=3, validation_data=(x_test, y_test_cat))
+
+    model.save("digit_model.h5")
+    return model
+
+if os.path.exists("digit_model.h5"):
+    model = load_model("digit_model.h5")
+else:
+    st.write("Training model for the first time...")
+    model = train_and_save_model()
+
+st.title("🧠 Handwritten Digit Recognizer")
+st.write("Upload a 28x28 image of a handwritten digit (0–9).")
+
+uploaded_file = st.file_uploader("Choose a digit image...", type=["png", "jpg", "jpeg"])
+
+if uploaded_file is not None:
+    image = Image.open(uploaded_file).convert('L')
+    image = ImageOps.invert(image)
+    st.image(image, caption='Uploaded Image', width=150)
+
+    image = image.resize((28, 28))
+    img_array = np.array(image) / 255.0
+    img_array = img_array.reshape(1, 28, 28, 1)
+
+    prediction = model.predict(img_array)
+    predicted_digit = np.argmax(prediction)
+
+    st.subheader(f"Predicted Digit: {predicted_digit}")
+    st.write(f"Confidence: {np.max(prediction)*100:.2f}%")
